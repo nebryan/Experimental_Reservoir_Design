@@ -1,13 +1,14 @@
 pacman::p_load(SeqExpMatch, dplyr)
 pacman::p_load(data.table)
+pacman::p_load(ggplot2, tidyr, stringr)
 
 rm(list = ls())
 
 #self_data = list()
 #private_data = list()
 
-n = 100000
-p = 2
+n = 1000
+p = 4
 mu_x = 1
 sigma_x = 1
 sigma_e = 1
@@ -47,7 +48,7 @@ set.seed(1984)
 errors = rnorm(n, 0, sigma_e)
 
 all_betas_and_correlations = list()
-all_betas_and_correlations = c(all_betas_and_correlations, list(setting = list(rho = 0, 	betas = c(1, 1, 1, 0, 0)))) #QUAD EVEN
+all_betas_and_correlations = c(all_betas_and_correlations, list(setting = list(rho = 0, 	betas = c(1, 1, 1, 0, 0, 2, 2, 1)))) #QUAD EVEN
 #all_betas_and_correlations = c(all_betas_and_correlations, list(setting = list(rho = 0.75, 	betas = c(1, 1, 1, 0, 0)))) #QUAD MORE UNEVEN with CORR
 #all_betas_and_correlations = c(all_betas_and_correlations, list(setting = list(rho = 0, 	betas = c(6, 1, 2, 0, 0)))) #QUAD MORE UNEVEN
 #all_betas_and_correlations = c(all_betas_and_correlations, list(setting = list(rho = 0.75, 	betas = c(6, 1, 2, 0, 0)))) #QUAD MORE UNEVEN with CORR
@@ -74,18 +75,21 @@ for (nsim in 1 : Nsim){
       betas[2] * X[, 2] + 
       betas[3] * X[, 1]^2 +
       betas[4] * X[, 2]^2 +
-      betas[5] * X[, 1] * X[, 2]
+      betas[5] * X[, 1] * X[, 2] +
+      betas[6] * X[, 3] +
+      betas[7] * X[, 4] +
+      betas[8] * X[, 3] * X[, 1]
     y = array(NA, n)
     
     #test all designs
     for (d in c("KK14", "KK21", "KK21stepwise")){ #"CRD", "BCRD", "Efron", "Atkinson", "KK14", "KK21", "KK21stepwise"
       for(m in c("", "_morisson_t", "_morisson_T")){
         if(m == ""){
-          seq_des_obj = SeqDesign$new(n = n, prob_T = 0.5, p = p, design = d, response_type = "continuous", verbose = TRUE, t_0_pct = 1e-04)
+          seq_des_obj = SeqDesign$new(n = n, prob_T = 0.5, p = p, design = d, response_type = "continuous", verbose = TRUE, t_0_pct = 1e-03)
         } else if(m == "_morisson_t"){
-          seq_des_obj = SeqDesign$new(n = n, prob_T = 0.5, p = p, design = d, response_type = "continuous", verbose = TRUE, morisson_little_t = TRUE, t_0_pct = 1e-04)
+          seq_des_obj = SeqDesign$new(n = n, prob_T = 0.5, p = p, design = d, response_type = "continuous", verbose = TRUE, morrison_little_t = TRUE, t_0_pct = 1e-03)
         } else {
-          seq_des_obj = SeqDesign$new(n = n, prob_T = 0.5, p = p, design = d, response_type = "continuous", verbose = TRUE, morisson_big_T = TRUE, t_0_pct = 1e-04)
+          seq_des_obj = SeqDesign$new(n = n, prob_T = 0.5, p = p, design = d, response_type = "continuous", verbose = TRUE, morrison_big_T = TRUE, t_0_pct = 1e-03)
         }
         
         for (t in 1 : n){
@@ -93,9 +97,10 @@ for (nsim in 1 : Nsim){
           seq_des_obj$add_subject_to_experiment_and_assign(X[t, ])
           if(t %% 100 == 0){
             print(t)
+            print(seq_des_obj$jacobs_fun(action = 1))
           }
           morisson_results[[paste0("res_size_", d, m)]][t] = seq_des_obj$jacobs_fun(action = 5)
-          morisson_results[[paste0("match_pair_distance_", d, m)]][t] = seq_des_obj$jacobs_fun(action = 6)
+          #morisson_results[[paste0("match_pair_distance_", d, m)]][t] = seq_des_obj$jacobs_fun(action = 6)
           
           #res_size[t] = seq_des_obj$jacobs_fun(action = 5)
           #match_pair_distance[t] =  seq_des_obj$jacobs_fun(action = 6)
@@ -130,12 +135,12 @@ for (nsim in 1 : Nsim){
   
 }
 
-write.csv(morisson_results, "C:\\temp\\morisson_results_comp.csv", row.names = FALSE)
-
-morisson_results = read.csv("C:/temp/morisson_results_comp.csv")
+write.csv(morisson_results, "C:\\temp\\morisson_results_comp1.csv", row.names = FALSE)
 
 
-pacman::p_load(ggplot2, tidyr, stringr)
+morisson_results = read.csv("C:\\temp\\morisson_results_comp1.csv")
+
+
 
 
 long_df = morisson_results %>%
@@ -158,6 +163,8 @@ for (b in unique_bases) {
   p = long_df %>%
     filter(base == b) %>%
     ggplot(aes(x = index, y = value, color = morisson_type)) +
+    xlim(0,10000) +
+    scale_y_log10() +
     #geom_line() +
     geom_smooth(se = FALSE, method = "loess", span = 0.2) +
     labs(title = b, x = "Index", y = "Value", color = "Version") +
@@ -166,25 +173,6 @@ for (b in unique_bases) {
   print(p)
 }
 
-for(n in names(morisson_results)){
-  print(
-    ggplot(morisson_results, aes(x = .data[["index"]], y = .data[[n]])) +
-      geom_line() +
-      labs(title = n, x = "Index", y = n)
-  )
-}
-
-df1 = data.frame(index = 1:n, match_pair_distance = match_pair_distance)
-
-ggplot(df1, aes(x = index, y = match_pair_distance)) +
-  geom_line() +
-  labs(title = "Plot of match_pair_distance", x = "Index", y = "match_pair_distance")
-
-df2 = data.frame(index = 1:n, res_size = res_size)
-
-ggplot(df2, aes(x = index, y = res_size)) +
-  geom_line() +
-  labs(title = "Plot of res_size", x = "Index", y = "res_size")
   
 
 # res_mod = res %>% 
